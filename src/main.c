@@ -78,15 +78,15 @@ struct block* block_provide(uint32_t x, uint32_t y) {
 char* block_to_char(enum blocktype type) {
     switch (type) {
         case blocktype_empty:
-            return ". ";
+            return "..";
         case blocktype_human:
-            return "@ ";
+            return "Hu";
         case blocktype_road:
-            return "= ";
+            return "Ro";
         case blocktype_house:
-            return "H ";
+            return "Ho";
         case blocktype_office:
-            return "O ";
+            return "Of";
         default:
             return "  ";
     }
