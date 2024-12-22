@@ -9,7 +9,7 @@
 
 #define chunk_size 256
 #define world_size 4096
-#define buf_size 4096
+#define buf_size 8192
 
 enum blocktype {
     blocktype_null,
@@ -143,6 +143,31 @@ void term_init() {
     }
 }
 void input_tick() {
+    char c;
+    if (read(STDIN_FILENO, &c, 1) == 1) {
+      switch (c) {
+          case 'w':
+            if(global.cursor_y > 0) {
+                global.cursor_y++;
+            }
+            break;
+          case 's':
+            if(global.cursor_y < world_size - 1) {
+                global.cursor_y--;
+            }
+            break;
+          case 'a':
+              if(global.cursor_x > 0) {
+                global.cursor_x--;
+              }
+              break;
+          case 'd':
+            if(global.cursor_x < world_size - 1) {
+                global.cursor_x++;
+            }
+            break;
+      }
+    }
 }
 void render_tick() {
     char buf_data[buf_size];
