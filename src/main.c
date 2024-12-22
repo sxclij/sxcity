@@ -24,9 +24,14 @@ struct world {
 };
 struct global {
     struct world world;
+    int camera_x;
+    int camera_y;
 };
 
-static struct global global;
+static struct global global = (struct global){
+    .camera_x = world_size / 2,
+    .camera_y = world_size / 2,
+};
 
 void render() {
     write(STDOUT_FILENO, "\x1b[H", 3);
