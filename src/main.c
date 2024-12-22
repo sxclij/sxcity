@@ -9,10 +9,8 @@ enum blocktype {
     blocktype_empty,
     blocktype_human,
     blocktype_road,
-    blocktype_house_0,
-    blocktype_house_1,
-    blocktype_office_0,
-    blocktype_office_1,
+    blocktype_house,
+    blocktype_office,
 };
 
 struct block {
