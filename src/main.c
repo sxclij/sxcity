@@ -9,15 +9,15 @@
 
 #define chunk_size 256
 #define world_size 4096
-#define buf_size 8192
+#define buf_size 65536
 
 enum blocktype {
     blocktype_null,
     blocktype_empty,
-    blocktype_human,
     blocktype_road,
     blocktype_house,
     blocktype_office,
+    blocktype_count // Add a count for easier mapping
 };
 
 struct string {
@@ -75,20 +75,18 @@ void string_push_str(struct string* dst, const char* src) {
 struct block* block_provide(uint32_t x, uint32_t y) {
     return &global.world.chunk[x / chunk_size][y / chunk_size].block[x % chunk_size][y % chunk_size];
 }
-char* block_to_char(enum blocktype type) {
+const char* block_to_color(enum blocktype type) {
     switch (type) {
         case blocktype_empty:
-            return "..";
-        case blocktype_human:
-            return "Hu";
+            return "\x1b[40m";  // Black
         case blocktype_road:
-            return "Ro";
+            return "\x1b[47m";  // White
         case blocktype_house:
-            return "Ho";
+            return "\x1b[44m";  // Blue
         case blocktype_office:
-            return "Of";
+            return "\x1b[42m";  // Green
         default:
-            return "  ";
+            return "\x1b[40m";  // Black
     }
 }
 void term_disableRawMode(int fd) {
@@ -106,18 +104,9 @@ void term_enableRawMode(int fd) {
     struct termios raw;
     if (global.term.rawmode)
         return;
-    if (!isatty(fd)) {
-        fprintf(stderr, "Not a TTY\n");
-        exit(1);
-    }
-    if (atexit(term_editorAtExit) != 0) {
-        perror("atexit failed");
-        exit(1);
-    }
-    if (tcgetattr(fd, &global.term.orig) == -1) {
-        perror("tcgetattr error");
-        exit(1);
-    }
+    isatty(fd);
+    atexit(term_editorAtExit);
+    tcgetattr(fd, &global.term.orig);
     raw = global.term.orig;
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     raw.c_oflag &= ~(OPOST);
@@ -125,10 +114,7 @@ void term_enableRawMode(int fd) {
     raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
-    if (tcsetattr(fd, TCSAFLUSH, &raw) < 0) {
-        perror("tcsetattr error");
-        exit(1);
-    }
+    tcsetattr(fd, TCSAFLUSH, &raw);
     global.term.rawmode = 1;
 }
 void term_init() {
@@ -145,28 +131,48 @@ void term_init() {
 void input_tick() {
     char c;
     if (read(STDIN_FILENO, &c, 1) == 1) {
-      switch (c) {
-          case 'w':
-            if(global.cursor_y > 0) {
-                global.cursor_y++;
+        switch (c) {
+            case 'w':
+                if (global.cursor_y > 0) {
+                    global.cursor_y++;
+                }
+                break;
+            case 's':
+                if (global.cursor_y < world_size - 1) {
+                    global.cursor_y--;
+                }
+                break;
+            case 'a':
+                if (global.cursor_x > 0) {
+                    global.cursor_x--;
+                }
+                break;
+            case 'd':
+                if (global.cursor_x < world_size - 1) {
+                    global.cursor_x++;
+                }
+                break;
+            case '1': {
+                struct block* block = block_provide(global.cursor_x, global.cursor_y);
+                block->type = blocktype_empty;
+                break;
             }
-            break;
-          case 's':
-            if(global.cursor_y < world_size - 1) {
-                global.cursor_y--;
+            case '2': {
+                struct block* block = block_provide(global.cursor_x, global.cursor_y);
+                block->type = blocktype_road;
+                break;
             }
-            break;
-          case 'a':
-              if(global.cursor_x > 0) {
-                global.cursor_x--;
-              }
-              break;
-          case 'd':
-            if(global.cursor_x < world_size - 1) {
-                global.cursor_x++;
+            case '3': {
+                struct block* block = block_provide(global.cursor_x, global.cursor_y);
+                block->type = blocktype_house;
+                break;
             }
-            break;
-      }
+            case '4': {
+                struct block* block = block_provide(global.cursor_x, global.cursor_y);
+                block->type = blocktype_office;
+                break;
+            }
+        }
     }
 }
 void render_tick() {
@@ -179,15 +185,16 @@ void render_tick() {
         for (uint32_t x = 0; x < global.term.screen_width; x++) {
             uint32_t world_x = camera_left + x;
             uint32_t world_y = camera_top + y;
+            struct block* block = block_provide(world_x, world_y);
+            string_push_str(&buf, block_to_color(block->type));
             if (world_x == global.cursor_x && world_y == global.cursor_y) {
                 string_push_str(&buf, "Cu");
             } else if (world_x == global.camera_x && world_y == global.camera_y) {
                 string_push_str(&buf, "Ca");
             } else if (world_x < world_size && world_y < world_size) {
-                struct block* block = block_provide(world_x, world_y);
-                string_push_str(&buf, block_to_char(block->type));
-            } else {
                 string_push_str(&buf, "  ");
+            } else {
+                string_push_str(&buf, "@@");
             }
         }
     }
