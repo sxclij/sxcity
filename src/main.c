@@ -125,14 +125,28 @@ void term_init() {
     term_enableRawMode();
 }
 void update_camera() {
-    // implement later
+    global.camera_x = global.cursor_x;
+    global.camera_y = global.cursor_y;
 }
 void update_cursor(uint32_t x, uint32_t y) {
-    // implement later
+    if (x >= world_size) {
+        x = world_size - 1;
+    }
+    if (y >= world_size) {
+        y = world_size - 1;
+    }
+    global.cursor_x = x;
+    global.cursor_y = y;
     update_camera();
 }
 int input_readkey() {
-    // implement later
+    char c;
+    int nread = read(STDIN_FILENO, &c, 1);
+    if (nread == 0) {
+        return -1;
+    } else {
+        return c;
+    }
 }
 void input_update() {
     while (1) {
@@ -161,16 +175,19 @@ void input_update() {
                 break;
             }
             case 's':
-                update_cursor(global.cursor_x + 1, global.cursor_y);
+                update_cursor(global.cursor_x, global.cursor_y + 1);
                 break;
             case 'a':
                 update_cursor(global.cursor_x - 1, global.cursor_y);
                 break;
             case 'w':
-                update_cursor(global.cursor_x, global.cursor_y + 1);
+                update_cursor(global.cursor_x, global.cursor_y - 1);
                 break;
             case 'd':
-                update_cursor(global.cursor_x, global.cursor_y - 1);
+                update_cursor(global.cursor_x + 1, global.cursor_y);
+                break;
+            case 'q': 
+                exit(0);
                 break;
         }
     }
@@ -185,8 +202,8 @@ void render_update() {
         for (int32_t x = 0; x < global.screen_width / 2; x++) {
             int32_t world_x = camera_left + x;
             int32_t world_y = camera_top + y;
-            if (world_x > world_size - 1 || world_y > world_size - 1) {
-                string_push_str(&buf, "\x1b[40m@@");  // Out of bounds
+            if (world_x < 0 || world_y < 0 || world_x >= world_size || world_y >= world_size) {
+                string_push_str(&buf, "\x1b[40m@@");
                 continue;
             }
             struct block* block = block_provide(world_x, world_y);
@@ -204,7 +221,7 @@ void update() {
     term_update();
     input_update();
     render_update();
-    usleep(10000);
+    usleep(global.tickrate);
 }
 void init() {
     term_init();
