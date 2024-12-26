@@ -17,7 +17,7 @@ enum blocktype {
     blocktype_road,
     blocktype_house,
     blocktype_office,
-    blocktype_count // Add a count for easier mapping
+    blocktype_count  // Add a count for easier mapping
 };
 
 struct string {
@@ -89,24 +89,23 @@ const char* block_to_color(enum blocktype type) {
             return "\x1b[40m";  // Black
     }
 }
-void term_disableRawMode(int fd) {
+void term_disableRawMode() {
     if (global.term.rawmode) {
-        if (tcsetattr(fd, TCSAFLUSH, &global.term.orig) == -1) {
-            perror("tcsetattr error");
-        }
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &global.term.orig);
         global.term.rawmode = 0;
     }
 }
 void term_editorAtExit(void) {
     term_disableRawMode(STDIN_FILENO);
 }
-void term_enableRawMode(int fd) {
+void term_enableRawMode() {
     struct termios raw;
-    if (global.term.rawmode)
+    if (global.term.rawmode) {
         return;
-    isatty(fd);
+    }
+    isatty(STDIN_FILENO);
     atexit(term_editorAtExit);
-    tcgetattr(fd, &global.term.orig);
+    tcgetattr(STDIN_FILENO, &global.term.orig);
     raw = global.term.orig;
     raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
     raw.c_oflag &= ~(OPOST);
@@ -114,19 +113,17 @@ void term_enableRawMode(int fd) {
     raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
-    tcsetattr(fd, TCSAFLUSH, &raw);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
     global.term.rawmode = 1;
 }
-void term_init() {
-    term_enableRawMode(STDIN_FILENO);
+void term_tick() {
     struct winsize ws;
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
-        global.term.screen_width = 80;
-        global.term.screen_height = 24;
-    } else {
-        global.term.screen_width = ws.ws_col / 2;
-        global.term.screen_height = ws.ws_row;
-    }
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
+    global.term.screen_width = ws.ws_col;
+    global.term.screen_height = ws.ws_row;
+}
+void term_init() {
+    term_enableRawMode();
 }
 void input_tick() {
     char c;
@@ -179,10 +176,10 @@ void render_tick() {
     char buf_data[buf_size];
     struct string buf = string_init(buf_data);
     string_push_str(&buf, "\x1b[H");
-    uint32_t camera_left = global.camera_x - global.term.screen_width / 2;
+    uint32_t camera_left = global.camera_x - global.term.screen_width / 4;
     uint32_t camera_top = global.camera_y - global.term.screen_height / 2;
     for (int32_t y = global.term.screen_height - 1; y >= 0; y--) {
-        for (uint32_t x = 0; x < global.term.screen_width; x++) {
+        for (uint32_t x = 0; x < global.term.screen_width / 2; x++) {
             uint32_t world_x = camera_left + x;
             uint32_t world_y = camera_top + y;
             struct block* block = block_provide(world_x, world_y);
@@ -201,6 +198,7 @@ void render_tick() {
     write(STDOUT_FILENO, buf.data, buf.size);
 }
 void tick() {
+    term_tick();
     input_tick();
     render_tick();
     usleep(10000);
