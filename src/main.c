@@ -10,6 +10,7 @@
 #define chunk_size 256
 #define world_size 4096
 #define buf_size 65536
+#define EDGE_THRESHOLD 5 // 画面端からの距離の閾値
 
 enum blocktype {
     blocktype_null,
@@ -125,30 +126,63 @@ void term_tick() {
 void term_init() {
     term_enableRawMode();
 }
+
+void update_cursor(char c) {
+    switch (c) {
+        case 'w':
+            if (global.cursor_y > 0) {
+                global.cursor_y--;
+            }
+            break;
+        case 's':
+            if (global.cursor_y < world_size - 1) {
+                global.cursor_y++;
+            }
+            break;
+        case 'a':
+            if (global.cursor_x > 0) {
+                global.cursor_x--;
+            }
+            break;
+        case 'd':
+            if (global.cursor_x < world_size - 1) {
+                global.cursor_x++;
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+void update_camera() {
+    // カーソルが画面端に近づいた場合のみカメラを移動させる
+    if (global.cursor_x < global.camera_x + EDGE_THRESHOLD) {
+        if (global.camera_x > 0) {
+            global.camera_x--;
+        }
+    } else if (global.cursor_x > global.camera_x + global.term.screen_width / 2 - 1 - EDGE_THRESHOLD) {
+        if (global.camera_x < world_size - global.term.screen_width / 2) {
+            global.camera_x++;
+        }
+    }
+
+    if (global.cursor_y < global.camera_y + EDGE_THRESHOLD) {
+        if (global.camera_y > 0) {
+            global.camera_y--;
+        }
+    } else if (global.cursor_y > global.camera_y + global.term.screen_height - 1 - EDGE_THRESHOLD) {
+        if (global.camera_y < world_size - global.term.screen_height) {
+            global.camera_y++;
+        }
+    }
+}
+
 void input_tick() {
     char c;
     if (read(STDIN_FILENO, &c, 1) == 1) {
+        update_cursor(c); // カーソルの位置を更新
+
         switch (c) {
-            case 'w':
-                if (global.cursor_y > 0) {
-                    global.cursor_y++;
-                }
-                break;
-            case 's':
-                if (global.cursor_y < world_size - 1) {
-                    global.cursor_y--;
-                }
-                break;
-            case 'a':
-                if (global.cursor_x > 0) {
-                    global.cursor_x--;
-                }
-                break;
-            case 'd':
-                if (global.cursor_x < world_size - 1) {
-                    global.cursor_x++;
-                }
-                break;
             case '1': {
                 struct block* block = block_provide(global.cursor_x, global.cursor_y);
                 block->type = blocktype_empty;
@@ -170,42 +204,51 @@ void input_tick() {
                 break;
             }
         }
+        update_camera(); // カーソル移動後にカメラを更新
     }
 }
+
 void render_tick() {
     char buf_data[buf_size];
     struct string buf = string_init(buf_data);
     string_push_str(&buf, "\x1b[H");
-    uint32_t camera_left = global.camera_x - global.term.screen_width / 4;
-    uint32_t camera_top = global.camera_y - global.term.screen_height / 2;
-    for (int32_t y = global.term.screen_height - 1; y >= 0; y--) {
-        for (uint32_t x = 0; x < global.term.screen_width / 2; x++) {
-            uint32_t world_x = camera_left + x;
-            uint32_t world_y = camera_top + y;
-            struct block* block = block_provide(world_x, world_y);
-            string_push_str(&buf, block_to_color(block->type));
-            if (world_x == global.cursor_x && world_y == global.cursor_y) {
-                string_push_str(&buf, "Cu");
-            } else if (world_x == global.camera_x && world_y == global.camera_y) {
-                string_push_str(&buf, "Ca");
-            } else if (world_x < world_size && world_y < world_size) {
-                string_push_str(&buf, "  ");
+    int32_t camera_left = global.camera_x - global.term.screen_width / 4;
+    int32_t camera_top = global.camera_y - global.term.screen_height / 2;
+
+    for (int32_t y = 0; y < global.term.screen_height; y++) {
+        for (int32_t x = 0; x < global.term.screen_width / 2; x++) {
+            int32_t world_x = camera_left + x;
+            int32_t world_y = camera_top + y;
+
+            if (world_x >= 0 && world_x < world_size && world_y >= 0 && world_y < world_size) {
+                struct block* block = block_provide(world_x, world_y);
+                string_push_str(&buf, block_to_color(block->type));
+                if (world_x == global.cursor_x && world_y == global.cursor_y) {
+                    string_push_str(&buf, "Cu");
+                } else if (world_x == global.camera_x && world_y == global.camera_y) {
+                    string_push_str(&buf, "Ca");
+                } else {
+                    string_push_str(&buf, "  ");
+                }
             } else {
-                string_push_str(&buf, "@@");
+                string_push_str(&buf, "\x1b[40m@@"); // Out of bounds
             }
         }
     }
     write(STDOUT_FILENO, buf.data, buf.size);
 }
+
 void tick() {
     term_tick();
     input_tick();
     render_tick();
     usleep(10000);
 }
+
 void init() {
     term_init();
 }
+
 int main() {
     init();
     while (1) {
